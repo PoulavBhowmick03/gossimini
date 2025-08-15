@@ -1,0 +1,11 @@
+[package]
+name = "node"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+libp2p = { version = "0.56", features = ["tcp","tokio","dns","websocket","quic","identify","ping","macros"] }
+tokio = { version = "1", features = ["rt-multi-thread","macros"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
