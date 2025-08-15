@@ -9,3 +9,6 @@ tokio = { version = "1", features = ["rt-multi-thread","macros"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
+libp2p-tls = "0.6.2"
+libp2p-yamux = "0.47.0"
+libp2p-noise = "0.46.1"
