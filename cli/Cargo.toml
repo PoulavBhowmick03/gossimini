@@ -9,3 +9,4 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 node = { path = "../node" }
+tokio = "1.47.1"

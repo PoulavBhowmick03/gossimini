@@ -45,7 +45,7 @@ impl Node {
         Ok(Self { peer_id, swarm })
     }
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<()> {
+    pub fn listen_on(&mut self, addr: Multiaddr) -> Result<()> {
         self.swarm.listen_on(addr)?;
         Ok(())
     }
