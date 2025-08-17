@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 #[serde(transparent)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
-struct TopicId(String);
+pub struct TopicId(String);
 
 impl TopicId {
     pub fn new<S: Into<String>>(s: S) -> Self {
@@ -22,7 +22,7 @@ impl MsgId {
 }
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, Eq)]
-struct Payload(Vec<u8>);
+pub struct Payload(pub Vec<u8>);
 
 pub struct SeenCache {
     pub seen: HashSet<MsgId>,
@@ -74,9 +74,9 @@ pub mod codec {
     }
 }
 
-#[derive(Serialize,Deserialize,Debug,Clone,PartialEq,Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Ack {
-    pub ok : bool,
+    pub ok: bool,
 }
 
 #[cfg(test)]
