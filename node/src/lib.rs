@@ -1,16 +1,24 @@
+mod gossip;
 use anyhow::Result;
-use libp2p::{
-    Multiaddr, PeerId, SwarmBuilder,
-    futures::StreamExt,
-    identify, identity, ping,
-    swarm::{NetworkBehaviour, Swarm, SwarmEvent},
+use libp2p::request_response::{
+    self, Event as ReqResEvent, Message as ReqResMessage, ProtocolSupport,
 };
+use libp2p::StreamProtocol;
+use libp2p::{
+    futures::StreamExt,
+    identify, identity, noise, ping,
+    swarm::{NetworkBehaviour, Swarm, SwarmEvent},
+    tls, yamux, Multiaddr, PeerId, SwarmBuilder,
+};
+use libp2p_request_response::{Behaviour, Codec};
+use std::fmt;
 use tracing::info;
 
 #[derive(NetworkBehaviour)]
 pub struct NodeBehaviour {
     identify: identify::Behaviour,
     ping: ping::Behaviour,
+    gossip: libp2p::request_response::json::Behaviour<core::WireMsg, core::Ack>,
 }
 
 impl NodeBehaviour {
@@ -20,7 +28,21 @@ impl NodeBehaviour {
             local_public.clone(),
         ));
         let ping = ping::Behaviour::default();
-        Self { identify, ping }
+        let protocols = [(
+            StreamProtocol::new("/gossimini/req/1.0.0"),
+            ProtocolSupport::Full,
+        )];
+        // Construct the gossip behaviour (replace with actual config as needed)
+        let gossip = libp2p::request_response::json::Behaviour::new(
+            protocols,
+            request_response::Config::default(),
+        );
+
+        Self {
+            identify,
+            ping,
+            gossip,
+        }
     }
 }
 
@@ -35,8 +57,8 @@ impl Node {
             .with_tokio()
             .with_tcp(
                 Default::default(),
-                (libp2p_tls::Config::new, libp2p_noise::Config::new),
-                libp2p_yamux::Config::default,
+                (tls::Config::new, noise::Config::new),
+                yamux::Config::default,
             )?
             .with_quic()
             .with_behaviour(|keypair| NodeBehaviour::new(&keypair.public()))?
@@ -59,10 +81,18 @@ impl Node {
                 SwarmEvent::Behaviour(ev) => {
                     println!("ev: {:?}", ev);
                 }
+                SwarmEvent::ConnectionEstablished { peer_id, connection_id, endpoint, num_established, concurrent_dial_errors, established_in } => {
+                    info!("peer-id: {:?}", peer_id)
+                }
                 other => {
                     info!(?other, "swarm");
                 }
             }
         }
+    }
+
+    pub fn dial(&mut self, addr: Multiaddr) -> Result<()> {
+        self.swarm.dial(addr)?;
+        Ok(())
     }
 }

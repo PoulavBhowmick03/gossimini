@@ -15,6 +15,7 @@ enum Sub {
     Run {
         #[arg(long, default_value = "/ip4/0.0.0.0/tcp/0")]
         listen: String,
+        dial: Option<String>,
     },
 }
 #[tokio::main]
@@ -26,10 +27,14 @@ async fn main() -> Result<()> {
     let Args { cmd } = Args::parse();
 
     match cmd {
-        Sub::Run { listen } => {
+        Sub::Run { listen, dial } => {
             let node = node::Node::new().await?;
             let mut node = node;
             node.listen_on(listen.parse().expect("valid multiaddr"))?;
+            if let Some(addr) = dial {
+                let dial_addr = addr.parse().expect("valid multiaddr");
+                node.dial(dial_addr)?;
+            }
             node.run().await?;
         }
     }
