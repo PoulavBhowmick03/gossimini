@@ -1,5 +1,6 @@
 mod gossip;
 use anyhow::Result;
+use core::{TopicId, WireMsg};
 use libp2p::request_response::{
     self, Event as ReqResEvent, Message as ReqResMessage, ProtocolSupport,
 };
@@ -10,7 +11,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, Swarm, SwarmEvent},
     tls, yamux, Multiaddr, PeerId, SwarmBuilder,
 };
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use tracing::info;
 
 #[derive(NetworkBehaviour)]
@@ -48,6 +49,9 @@ impl NodeBehaviour {
 pub struct Node {
     pub peer_id: PeerId,
     pub swarm: Swarm<NodeBehaviour>,
+    pub seen: core::SeenCache,
+    pub local_subs: HashSet<TopicId>,
+    pub peer_subs: HashMap<TopicId, HashSet<PeerId>>,
 }
 
 impl Node {
@@ -63,7 +67,16 @@ impl Node {
             .with_behaviour(|keypair| NodeBehaviour::new(&keypair.public()))?
             .build();
         let peer_id = *swarm.local_peer_id();
-        Ok(Self { peer_id, swarm })
+        let seen = core::SeenCache::new(4096);
+        let local_subs = [core::TopicId::new("news")].into_iter().collect();
+        let peer_subs = std::collections::HashMap::new();
+        Ok(Self {
+            peer_id,
+            swarm,
+            seen,
+            local_subs,
+            peer_subs,
+        })
     }
 
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<()> {
@@ -109,12 +122,13 @@ impl Node {
                                                         .send_response(channel, ack)
                                                         .expect("send response");
                                                     // Broadcast to all other connected peers
-                                                    let peers_to_notify: Vec<_> = self
-                                                        .swarm
-                                                        .connected_peers()
-                                                        .cloned()
-                                                        .collect();
-                                                    for p in peers_to_notify {
+                                                    // let peers_to_notify: Vec<_> = self
+                                                    //     .swarm
+                                                    //     .connected_peers()
+                                                    //     .cloned()
+                                                    //     .collect();
+                                                    let targets = self.subscribed_peers(&topic);
+                                                    for p in targets {
                                                         if p != peer {
                                                             self.swarm
                                                                 .behaviour_mut()
@@ -131,7 +145,20 @@ impl Node {
                                                     }
                                                 }
                                                 core::WireMsg::Subscribe { topic } => {
+                                                    self.peer_subscribe(peer, topic.clone());
                                                     let _request = core::WireMsg::Subscribe {
+                                                        topic: topic.clone(),
+                                                    };
+                                                    let ack = core::Ack { ok: true };
+                                                    self.swarm
+                                                        .behaviour_mut()
+                                                        .gossip
+                                                        .send_response(channel, ack)
+                                                        .expect("send response");
+                                                }
+                                                core::WireMsg::Unsubscribe { topic } => {
+                                                    self.peer_unsubscribe(peer, &topic.clone());
+                                                    let _request = WireMsg::Unsubscribe {
                                                         topic: topic.clone(),
                                                     };
                                                     let ack = core::Ack { ok: true };
@@ -218,11 +245,13 @@ impl Node {
                             .gossip
                             .send_request(&peer_id, subscribe_msg);
 
+                        let data = b"hello world".to_vec();
                         let publish = core::WireMsg::Publish {
                             topic: core::TopicId::new("news"),
-                            msg_id: core::MsgId::from_bytes([1; 32]),                            // If Payload is a type alias (type Payload = Vec<u8>), use just .to_vec():
+                            msg_id: core::MsgId::from_data(&data),
                             data: core::Payload(b"hello world".to_vec()),
                         };
+                        self.local_subs.insert(TopicId::new("news"));
                         self.swarm
                             .behaviour_mut()
                             .gossip
@@ -239,5 +268,18 @@ impl Node {
     pub fn dial(&mut self, addr: Multiaddr) -> Result<()> {
         self.swarm.dial(addr)?;
         Ok(())
+    }
+
+    pub fn peer_subscribe(&mut self, peer: PeerId, topic: TopicId) {
+        self.peer_subs.entry(topic).or_default().insert(peer);
+    }
+    pub fn peer_unsubscribe(&mut self, peer: PeerId, topic: &TopicId) {
+        self.peer_subs.remove(topic);
+    }
+    pub fn subscribed_peers(&self, topic: &core::TopicId) -> Vec<PeerId> {
+        self.peer_subs
+            .get(topic)
+            .map(|peers| peers.iter().cloned().collect())
+            .unwrap_or_default()
     }
 }

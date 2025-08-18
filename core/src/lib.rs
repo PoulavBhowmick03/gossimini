@@ -1,10 +1,11 @@
+mod cache;
 use std::collections::HashSet;
 pub use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
 #[serde(transparent)]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub struct TopicId(String);
 
 impl TopicId {
@@ -18,6 +19,10 @@ pub struct MsgId([u8; 32]);
 impl MsgId {
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
         MsgId(bytes)
+    }
+    pub fn from_data(data: &[u8]) -> Self {
+        let hash = blake3::hash(data);
+        MsgId(*hash.as_bytes())
     }
 }
 
@@ -81,7 +86,7 @@ pub struct Ack {
 
 #[cfg(test)]
 mod tests {
-    use core::error;
+    use core::{error, hash};
 
     use crate::codec::{decode, encode};
 
@@ -143,5 +148,14 @@ mod tests {
         let back = decode(&bytes)?;
         assert_eq!(msg, back);
         Ok(())
+    }
+
+    #[test]
+    fn test_hashing() {
+        let hash1 = MsgId::from_data(&[10]);
+        let mut hash2 = MsgId::from_data(&[10]);
+        assert_eq!(hash1, hash2);
+        hash2 = MsgId::from_data(&[11]);
+        assert_ne!(hash1, hash2);
     }
 }
